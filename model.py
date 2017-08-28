@@ -79,7 +79,7 @@ def var_from_numpy(x, cuda=False, requires_grad=False):
 
 def train(all_imgs, init_latents, out_path='.',
           epochs=50, batch_size=256, cuda=False, latent_dim=100,
-          loss_fn='laplacian'):
+          loss_fn='laplacian', optimizer='SGD'):
     make_var = partial(var_from_numpy, cuda=cuda)
     epoch_dir = os.path.join('.', 'glo-{}').format
     for e in range(epochs):
@@ -95,13 +95,17 @@ def train(all_imgs, init_latents, out_path='.',
     if cuda:
         generator = generator.cuda()
 
-    opt = torch.optim.SGD([
+    opt_class = getattr(torch.optim, optimizer)
+    opt = opt_class([
         {'params': generator.parameters(), 'lr': 1},
         {'params': [z], 'lr': 10},
     ])
 
     if loss_fn == 'laplacian':
         loss_fn = laplacian_loss
+    elif loss_fn.startswith('laplacian-'):
+        n_levels = int(loss_fn[len('laplacian-'):])
+        loss_fn = partial(laplacian_loss, n_levels=n_levels)
     elif loss_fn == 'mse':
         loss_fn = nn.functional.mse_loss
 
@@ -163,6 +167,8 @@ def main():
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--loss-fn', choices=['laplacian', 'mse'],
                         default='laplacian')
+    parser.add_argument('--optimizer', choices=['SGD', 'ADAM'],
+                        default='SGD')
     parser.add_argument('--seed', type=int)
     args = parser.parse_args()
 
