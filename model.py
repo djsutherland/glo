@@ -101,7 +101,7 @@ def train(all_imgs, init_latents, out_path='.',
     ])
 
     if loss_fn == 'laplacian':
-        loss_fn = laplacian_loss
+        loss_fn = partial(laplacian_loss, cuda=cuda)
     elif loss_fn == 'mse':
         loss_fn = nn.functional.mse_loss
 
@@ -133,6 +133,8 @@ def train(all_imgs, init_latents, out_path='.',
 
             loss_val = loss.data.cpu().numpy()[0]
             t.set_postfix(loss=loss_val)
+            if np.any(np.isnan(loss_val)):
+                raise ValueError("loss is nan :(")
 
         epoch_t.write("Epoch {}: final loss {}".format(epoch, loss_val))
         z_numpy = z.data.cpu().numpy()
@@ -174,7 +176,7 @@ def main():
 
     all_imgs, init_latents = load_data(args.data_dir)
     kwargs = vars(args)
-    del kwargs['data_dir']
+    del kwargs['data_dir'], kwargs['seed']
     train(all_imgs, init_latents, **kwargs)
 
 

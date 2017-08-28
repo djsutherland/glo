@@ -30,16 +30,19 @@ def conv_gauss_kernel(x, k_size=5, sigma=1, padding=0, stride=1, cuda=False):
     # TODO: same-padding instead of zero?
     n_channels = x.size()[1]
     weights = weights.expand(n_channels, 1, k_size, k_size)
+    if cuda:
+        weights = weights.contiguous()
     return F.conv2d(x, weights, stride=stride, padding=padding,
                     groups=n_channels)
 
 
-def laplacian_pyramid(x, n_levels, k_size=5, sigma=2):
+def laplacian_pyramid(x, n_levels, k_size=5, sigma=2, cuda=False):
     pyr = []
     current = x
     for level in range(n_levels):
         gauss = conv_gauss_kernel(
-            current, k_size=k_size, sigma=sigma, padding=k_size // 2)
+            current, k_size=k_size, sigma=sigma, padding=k_size // 2,
+            cuda=cuda)
         diff = current - gauss
         pyr.append(diff)
         current = F.avg_pool2d(gauss, 2)
@@ -47,11 +50,11 @@ def laplacian_pyramid(x, n_levels, k_size=5, sigma=2):
     return pyr
 
 
-def laplacian_loss(input, target, n_levels=3, k_size=5, sigma=2):
-    kw = dict(n_levels=n_levels, k_size=k_size, sigma=sigma)
+def laplacian_loss(input, target, n_levels=3, k_size=5, sigma=2, cuda=False):
+    kw = dict(n_levels=n_levels, k_size=k_size, sigma=sigma, cuda=cuda)
     pyr_i = laplacian_pyramid(input, **kw)
     pyr_t = laplacian_pyramid(target, **kw)
     loss = 0
-    for j, (i, t) in enumerate(zip(pyr_i, pyr_t)):
+    for j, (i, t) in enumerate(zip(pyr_i, pyr_t), 1):
         loss += torch.norm(i - t, p=1) / 2. ** (2 * j)
     return loss
