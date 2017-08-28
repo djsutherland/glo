@@ -81,7 +81,7 @@ def train(all_imgs, init_latents, out_path='.',
           epochs=50, batch_size=256, cuda=False, latent_dim=100,
           loss_fn='laplacian', optimizer='SGD'):
     make_var = partial(var_from_numpy, cuda=cuda)
-    epoch_dir = os.path.join('.', 'glo-{}').format
+    epoch_dir = os.path.join(out_path, 'glo-{}').format
     for e in range(epochs):
         d = epoch_dir(e)
         if os.path.isdir(d):
