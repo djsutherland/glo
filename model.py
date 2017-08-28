@@ -169,7 +169,7 @@ def main():
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--loss-fn', choices=['laplacian', 'mse'],
                         default='laplacian')
-    parser.add_argument('--optimizer', choices=['SGD', 'ADAM'],
+    parser.add_argument('--optimizer', choices=['SGD', 'Adam'],
                         default='SGD')
     parser.add_argument('--seed', type=int)
     args = parser.parse_args()
