@@ -13,6 +13,8 @@ from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torchvision.utils import save_image
 import tqdm
 
+from laplacian_loss import laplacian_loss
+
 
 def make_generator(latent_dim=100, num_channels=3, image_size=64):
     nz = latent_dim
@@ -76,7 +78,8 @@ def var_from_numpy(x, cuda=False, requires_grad=False):
 
 
 def train(all_imgs, init_latents, out_path='.',
-          epochs=50, batch_size=256, cuda=False, latent_dim=100):
+          epochs=50, batch_size=256, cuda=False, latent_dim=100,
+          loss_fn='laplacian'):
     make_var = partial(var_from_numpy, cuda=cuda)
     epoch_dir = os.path.join('.', 'glo-{}').format
     for e in range(epochs):
@@ -97,7 +100,10 @@ def train(all_imgs, init_latents, out_path='.',
         {'params': [z], 'lr': 10},
     ])
 
-    loss_fn = nn.functional.mse_loss  # TODO: laplacian loss
+    if loss_fn == 'laplacian':
+        loss_fn = laplacian_loss
+    elif loss_fn == 'mse':
+        loss_fn = nn.functional.mse_loss
 
     samp_latent_stds = np.random.randn(100, latent_dim).astype(np.float32)
 
@@ -155,6 +161,8 @@ def main():
     parser.add_argument('--cuda', action='store_true', default=True)
     parser.add_argument('--no-cuda', action='store_false', dest='cuda')
     parser.add_argument('--batch-size', type=int, default=256)
+    parser.add_argument('--loss', choices=['laplacian', 'mse'],
+                        default='laplacian')
     args = parser.parse_args()
 
     all_imgs, init_latents = load_data(args.data_dir)
