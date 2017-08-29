@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from __future__ import division, print_function
 
 from functools import partial
@@ -21,6 +22,7 @@ def make_generator(latent_dim=100, num_channels=3, image_size=64):
     ngf = image_size
     nc = num_channels
 
+    # based on DCGAN from pytorch/examples
     generator = nn.Sequential(
         # input is Z, going into a convolution
         nn.ConvTranspose2d(nz, ngf * 8, 4, 1, 0, bias=False),
@@ -122,7 +124,7 @@ def train(all_imgs, init_latents, out_path='.',
         samp = RandomSampler(all_imgs)
         batcher = BatchSampler(samp, batch_size=batch_size, drop_last=True)
         t = tqdm.tqdm(batcher, desc='Batch')
-        for inds in t:
+        for batch_i, inds in enumerate(t):
             opt.zero_grad()
 
             zs = z[make_var(np.asarray(inds))][:, :, newaxis, newaxis]
@@ -136,11 +138,12 @@ def train(all_imgs, init_latents, out_path='.',
             z_norms = torch.norm(
                 torch.squeeze(torch.squeeze(zs, 3), 2), p=2, dim=1)
             which = z_norms > 1
-            embiggen = (slice(None),) + (newaxis,) * 3
-            zs[which[embiggen]] /= z_norms[embiggen]
+            if which.data.any():
+                embiggen = (slice(None),) + (newaxis,) * 3
+                zs[which[embiggen]] /= z_norms[embiggen]
 
             loss_val = loss.data.cpu().numpy()[0]
-            t.set_postfix(loss='{:.5}'.format(loss_val))
+            t.set_postfix(loss='{:.4f}'.format(loss_val))
             if np.any(np.isnan(loss_val)):
                 raise ValueError("loss is nan :(")
 
@@ -176,8 +179,10 @@ def main():
     parser.add_argument('--cuda', action='store_true', default=True)
     parser.add_argument('--no-cuda', action='store_false', dest='cuda')
     parser.add_argument('--batch-size', type=int, default=256)
-    parser.add_argument('--loss-fn', choices=['laplacian', 'mse'],
-                        default='laplacian')
+    parser.add_argument(
+        '--loss-fn', choices=['laplacian', 'mse'] +
+                             ['laplacian-{}'.format(i) for i in range(1, 7)],
+        default='laplacian')
     parser.add_argument('--optimizer', choices=['SGD', 'Adam'],
                         default='SGD')
     parser.add_argument('--seed', type=int)

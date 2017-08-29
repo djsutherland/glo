@@ -1,5 +1,7 @@
-import numpy as np
+from __future__ import print_function, division
+import math
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
@@ -52,7 +54,7 @@ def conv_gauss_kernel(x, k_size=5, sigma=1, stride=1, cuda=False,
 def laplacian_pyramid(x, n_levels=-1, k_size=9, sigma=2, padding='reflect',
                       cuda=False, downscale=2):
     if n_levels == -1:  # as many levels as possible
-        n_levels = int(np.ceil(np.log(max(x.size()[-2:]), downscale)))
+        n_levels = int(np.ceil(math.log(max(x.size()[-2:]), downscale)))
 
     pyr = []
     current = x
@@ -71,5 +73,7 @@ def laplacian_loss(input, target, **kwargs):
     pyr_t = laplacian_pyramid(target, **kwargs)
     loss = 0
     for j, (i, t) in enumerate(zip(pyr_i, pyr_t), 1):
-        loss += torch.norm(i - t, p=1) / 2. ** (2 * j)
+        # wt = 2 ** (-2 * j)
+        wt = 1 / float(np.prod(i.data.size()[1:]))
+        loss += wt * torch.norm(i - t, p=1)
     return loss
