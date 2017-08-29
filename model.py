@@ -154,6 +154,7 @@ def train(all_imgs, init_latents, out_path='.',
 
             if do_checkpoint:
                 torch.save(generator.state_dict(), d('gen-params.pkl'))
+                torch.save(optimizer.state_dict(), d('opt-state.pkl'))
                 np.save(d('latents.npy'), z_numpy)
                 np.savez(d('latents-fit.npz'), mean=mean, cov=cov)
 
