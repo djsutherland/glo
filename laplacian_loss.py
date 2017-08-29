@@ -16,44 +16,59 @@ def gauss_kernel(size=5, sigma=1):
 _gauss_kernel_weights = {}
 
 
-def conv_gauss_kernel(x, k_size=5, sigma=1, padding=0, stride=1, cuda=False):
+def conv_gauss_kernel(x, k_size=5, sigma=1, stride=1, cuda=False,
+                      padding='reflect'):
+    assert k_size % 2 == 1
+    n_channels = x.size()[1]
+
     global _gauss_kernel_weights
-    if (k_size, sigma, cuda) in _gauss_kernel_weights:
-        weights = _gauss_kernel_weights[k_size, sigma, cuda]
+    idx = (k_size, sigma, cuda, n_channels)
+    if idx in _gauss_kernel_weights:
+        weights = _gauss_kernel_weights[idx]
     else:
         weights = torch.from_numpy(gauss_kernel(size=k_size, sigma=sigma))
         if cuda:
             weights = weights.cuda()
         weights = Variable(weights, requires_grad=False)
-        _gauss_kernel_weights[k_size, sigma, cuda] = weights
+        weights = weights.expand(n_channels, 1, k_size, k_size)
+        if cuda:
+            weights = weights.contiguous()
+        _gauss_kernel_weights[idx] = weights
 
-    # TODO: same-padding instead of zero?
-    n_channels = x.size()[1]
-    weights = weights.expand(n_channels, 1, k_size, k_size)
-    if cuda:
-        weights = weights.contiguous()
-    return F.conv2d(x, weights, stride=stride, padding=padding,
-                    groups=n_channels)
+    padding_amt = k_size // 2
+    padding_kw = {}
+    if padding == 'reflect':
+        x = torch.nn.ReflectionPad2d(padding_amt)(x)
+    elif padding in {'same', 'replicate'}:
+        x = torch.nn.ReplicationPad2d(padding_amt)(x)
+    elif padding == 'zero':
+        padding_kw['padding'] = padding_amt
+    else:
+        raise ValueError("unknown padding type {}".format(padding))
+
+    return F.conv2d(x, weights, stride=stride, groups=n_channels, **padding_kw)
 
 
-def laplacian_pyramid(x, n_levels, k_size=5, sigma=2, cuda=False):
+def laplacian_pyramid(x, n_levels=-1, k_size=9, sigma=2, padding='reflect',
+                      cuda=False, downscale=2):
+    if n_levels == -1:  # as many levels as possible
+        n_levels = int(np.ceil(np.log(max(x.size()[-2:]), downscale)))
+
     pyr = []
     current = x
     for level in range(n_levels):
         gauss = conv_gauss_kernel(
-            current, k_size=k_size, sigma=sigma, padding=k_size // 2,
-            cuda=cuda)
+            current, k_size=k_size, sigma=sigma, padding=padding, cuda=cuda)
         diff = current - gauss
         pyr.append(diff)
-        current = F.avg_pool2d(gauss, 2)
+        current = F.avg_pool2d(gauss, downscale)
     pyr.append(current)
     return pyr
 
 
-def laplacian_loss(input, target, n_levels=3, k_size=5, sigma=2, cuda=False):
-    kw = dict(n_levels=n_levels, k_size=k_size, sigma=sigma, cuda=cuda)
-    pyr_i = laplacian_pyramid(input, **kw)
-    pyr_t = laplacian_pyramid(target, **kw)
+def laplacian_loss(input, target, **kwargs):
+    pyr_i = laplacian_pyramid(input, **kwargs)
+    pyr_t = laplacian_pyramid(target, **kwargs)
     loss = 0
     for j, (i, t) in enumerate(zip(pyr_i, pyr_t), 1):
         loss += torch.norm(i - t, p=1) / 2. ** (2 * j)
