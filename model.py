@@ -79,7 +79,8 @@ def var_from_numpy(x, cuda=False, requires_grad=False):
 
 def train(all_imgs, init_latents, out_path='.',
           epochs=50, batch_size=256, cuda=False, latent_dim=100,
-          loss_fn='laplacian', optimizer='SGD'):
+          loss_fn='laplacian', optimizer='SGD',
+          checkpoint_every=10, sample_every=1):
     make_var = partial(var_from_numpy, cuda=cuda)
     epoch_dir = os.path.join(out_path, 'glo-{}').format
     for e in range(epochs):
@@ -113,7 +114,10 @@ def train(all_imgs, init_latents, out_path='.',
 
     epoch_t = tqdm.trange(epochs, desc='Epoch')
     for epoch in epoch_t:
-        os.makedirs(epoch_dir(epoch))  # save time if not writeable
+        do_checkpoint = epoch % checkpoint_every == 0 or epoch == epochs - 1
+        do_sample = epoch % sample_every == 0 or epoch == epochs - 1
+        if do_checkpoint or do_sample:
+            os.makedirs(epoch_dir(epoch))  # save time if not writeable
 
         samp = RandomSampler(all_imgs)
         batcher = BatchSampler(samp, batch_size=batch_size, drop_last=True)
@@ -141,21 +145,25 @@ def train(all_imgs, init_latents, out_path='.',
                 raise ValueError("loss is nan :(")
 
         epoch_t.write("Epoch {}: final loss {}".format(epoch, loss_val))
-        z_numpy = z.data.cpu().numpy()
-        mean = np.mean(z_numpy, axis=0)
-        cov = np.cov(z_numpy, rowvar=False)
+        if do_checkpoint or do_sample:
+            d = partial(os.path.join, epoch_dir(epoch))
 
-        d = partial(os.path.join, epoch_dir(epoch))
-        torch.save(generator.state_dict(), d('gen-params.pkl'))
-        np.save(d('latents.npy'), z_numpy)
-        np.savez(d('latents-fit.npz'), mean=mean, cov=cov)
+            z_numpy = z.data.cpu().numpy()
+            mean = np.mean(z_numpy, axis=0)
+            cov = np.cov(z_numpy, rowvar=False)
 
-        latent_samps = samp_latent_stds.dot(np.linalg.cholesky(cov))
-        latent_samps += mean
-        latent_samps = latent_samps.astype(np.float32)
-        img_samps = generator(make_var(latent_samps)[:, :, newaxis, newaxis])
-        save_image(img_samps.data, d('samples.jpg'), nrow=10)
-        np.save(d('samples-latents.npy'), latent_samps)
+            if do_checkpoint:
+                torch.save(generator.state_dict(), d('gen-params.pkl'))
+                np.save(d('latents.npy'), z_numpy)
+                np.savez(d('latents-fit.npz'), mean=mean, cov=cov)
+
+            if do_sample:
+                z_samps = samp_latent_stds.dot(np.linalg.cholesky(cov))
+                z_samps += mean
+                z_samps = z_samps.astype(np.float32)
+                img_samps = generator(make_var(z_samps)[:, :, newaxis, newaxis])
+                save_image(img_samps.data, d('samples.jpg'), nrow=10)
+                np.save(d('samples-latents.npy'), z_samps)
 
 
 def main():
@@ -172,6 +180,8 @@ def main():
     parser.add_argument('--optimizer', choices=['SGD', 'Adam'],
                         default='SGD')
     parser.add_argument('--seed', type=int)
+    parser.add_argument('--checkpoint-every', type=int, default=10)
+    parser.add_argument('--sample-every', type=int, default=1)
     args = parser.parse_args()
 
     if args.seed:
