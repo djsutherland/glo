@@ -140,7 +140,7 @@ def train(all_imgs, init_latents, out_path='.',
             zs[which[embiggen]] /= z_norms[embiggen]
 
             loss_val = loss.data.cpu().numpy()[0]
-            t.set_postfix(loss=loss_val)
+            t.set_postfix(loss='{:.5}'.format(loss_val))
             if np.any(np.isnan(loss_val)):
                 raise ValueError("loss is nan :(")
 
