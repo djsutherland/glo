@@ -1,4 +1,4 @@
-from __future__ import print_function, division
+from __future__ import division, print_function
 import math
 
 import numpy as np
@@ -19,7 +19,7 @@ _gauss_kernel_weights = {}
 
 
 def conv_gauss_kernel(x, k_size=5, sigma=1, stride=1, cuda=False,
-                      padding='reflect'):
+                      padding='same'):
     assert k_size % 2 == 1
     n_channels = x.size()[1]
 
@@ -41,6 +41,8 @@ def conv_gauss_kernel(x, k_size=5, sigma=1, stride=1, cuda=False,
     padding_kw = {}
     if padding == 'reflect':
         x = torch.nn.ReflectionPad2d(padding_amt)(x)
+        # NOTE: breaks if the pyramid gets too small:
+        #       https://github.com/pytorch/pytorch/issues/2563
     elif padding in {'same', 'replicate'}:
         x = torch.nn.ReplicationPad2d(padding_amt)(x)
     elif padding == 'zero':
@@ -51,7 +53,7 @@ def conv_gauss_kernel(x, k_size=5, sigma=1, stride=1, cuda=False,
     return F.conv2d(x, weights, stride=stride, groups=n_channels, **padding_kw)
 
 
-def laplacian_pyramid(x, n_levels=-1, k_size=9, sigma=2, padding='reflect',
+def laplacian_pyramid(x, n_levels=-1, k_size=9, sigma=2, padding='same',
                       cuda=False, downscale=2):
     if n_levels == -1:  # as many levels as possible
         n_levels = int(np.ceil(math.log(max(x.size()[-2:]), downscale)))

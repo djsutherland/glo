@@ -125,9 +125,10 @@ def train(all_imgs, init_latents, out_path='.',
         batcher = BatchSampler(samp, batch_size=batch_size, drop_last=True)
         t = tqdm.tqdm(batcher, desc='Batch')
         for batch_i, inds in enumerate(t):
+            inds_v = make_var(np.asarray(inds))
             opt.zero_grad()
 
-            zs = z[make_var(np.asarray(inds))][:, :, newaxis, newaxis]
+            zs = z[inds_v][:, :, newaxis, newaxis]
             recons = generator(zs)
             imgs = make_var(all_imgs[inds])
             loss = loss_fn(recons, imgs)
@@ -135,12 +136,11 @@ def train(all_imgs, init_latents, out_path='.',
             loss.backward()
             opt.step()
 
-            z_norms = torch.norm(
-                torch.squeeze(torch.squeeze(zs, 3), 2), p=2, dim=1)
+            # projection step: happen on data directly, not Variables
+            z_norms = torch.norm(z.data[inds_v.data], p=2, dim=1)
             which = z_norms > 1
-            if which.data.any():
-                embiggen = (slice(None),) + (newaxis,) * 3
-                zs[which[embiggen]] /= z_norms[embiggen]
+            if which.any():
+                z.data[inds_v.data[which]] /= z_norms[which][:, np.newaxis]
 
             loss_val = loss.data.cpu().numpy()[0]
             t.set_postfix(loss='{:.4f}'.format(loss_val))
@@ -162,7 +162,12 @@ def train(all_imgs, init_latents, out_path='.',
                 np.savez(d('latents-fit.npz'), mean=mean, cov=cov)
 
             if do_sample:
-                z_samps = samp_latent_stds.dot(np.linalg.cholesky(cov))
+                try:
+                    l_factor = np.linalg.cholesky(cov)
+                except np.linalg.LinAlgError:
+                    u, s, v = np.linalg.svd(cov)
+                    l_factor = u * np.sqrt(s)[np.newaxis, :]
+                z_samps = samp_latent_stds.dot(l_factor)
                 z_samps += mean
                 z_samps = z_samps.astype(np.float32)
                 img_samps = generator(make_var(z_samps)[:, :, newaxis, newaxis])
