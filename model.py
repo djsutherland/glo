@@ -129,16 +129,20 @@ def train(all_imgs, init_latents, out_path='.',
 
     samp_latent_stds = np.random.randn(100, latent_dim).astype(np.float32)
 
-    epoch_t = tqdm.trange(epochs, desc='Epoch')
+    #epoch_t = tqdm.trange(epochs, desc='Epoch')
+    epoch_t = range(epochs)
     for epoch in epoch_t:
         do_checkpoint = epoch % checkpoint_every == 0 or epoch == epochs - 1
         do_sample = epoch % sample_every == 0 or epoch == epochs - 1
         if do_checkpoint or do_sample:
             os.makedirs(epoch_dir(epoch))  # save time if not writeable
 
-        samp = RandomSampler(all_imgs)
+        # samp = RandomSampler(all_imgs)
+        from torch.utils.data.sampler import SequentialSampler
+        samp = SequentialSampler(all_imgs)
         batcher = BatchSampler(samp, batch_size=batch_size, drop_last=True)
-        t = tqdm.tqdm(batcher, desc='Batch')
+        #t = tqdm.tqdm(batcher, desc='Batch')
+        t = batcher
         for batch_i, inds in enumerate(t):
             inds_v = make_var(np.asarray(inds))
             opt.zero_grad()
@@ -151,14 +155,22 @@ def train(all_imgs, init_latents, out_path='.',
             loss.backward()
             opt.step()
 
+            print("{}/{}: loss {:.5}; {:.3} {:.3} {:.3} {:.3}".format(
+                epoch, batch_i, loss.data.cpu().numpy()[0],
+                max(np.max(np.abs(p.data.cpu().numpy())) for p in generator.parameters()),
+                max(np.max(np.abs(p.grad.data.cpu().numpy())) for p in generator.parameters()),
+                np.max(np.abs(z.data.cpu().numpy())),
+                np.max(np.abs(z.grad.data.cpu().numpy())),
+                ))
+
             project_(z.data, inds=inds_v.data)
 
             loss_val = loss.data.cpu().numpy()[0]
-            t.set_postfix(loss='{:.4f}'.format(loss_val))
+            # t.set_postfix(loss='{:.4f}'.format(loss_val))
             if np.any(np.isnan(loss_val)):
                 raise ValueError("loss is nan :(")
 
-        epoch_t.write("Epoch {}: final loss {}".format(epoch, loss_val))
+        # epoch_t.write("Epoch {}: final loss {}".format(epoch, loss_val))
         if do_checkpoint or do_sample:
             d = partial(os.path.join, epoch_dir(epoch))
 
