@@ -6,7 +6,6 @@ import os
 
 import numpy as np
 from numpy import newaxis
-from sklearn.utils.extmath import row_norms
 import torch
 from torch import nn
 from torch.autograd import Variable
@@ -58,17 +57,10 @@ def make_generator(latent_dim=100, num_channels=3, image_size=64):
     return generator
 
 
-def scale_latents(pca_codes, copy=True):
-    z = pca_codes.copy() if copy else pca_codes
-    norms = row_norms(z)
-    z[norms > 1] /= norms[:, newaxis]
-    return z
-
-
 def load_data(data_dir):
     all_imgs = np.load(os.path.join(data_dir, 'imgs.npy'), mmap_mode='r')
     with np.load(os.path.join(data_dir, 'pca.npz')) as d:
-        latents = scale_latents(d['codes'], copy=False)
+        latents = d['codes']
     return all_imgs, latents
 
 
