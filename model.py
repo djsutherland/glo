@@ -84,9 +84,8 @@ def project_(z, inds=None):
         z_norms = torch.norm(z, p=2, dim=1)
         small_enough = z_norms <= 1
         if not small_enough.all():
-            wts = z_norms[:, np.newaxis].expand_as(z)
-            wts.masked_fill_(small_enough[:, np.newaxis], 1)
-            z /= wts
+            z_norms.masked_fill_(small_enough, 1)
+            z /= z_norms[:, np.newaxis]
     else:
         z_norms = torch.norm(z[inds], p=2, dim=1)
         which = z_norms > 1
