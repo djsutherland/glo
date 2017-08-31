@@ -79,6 +79,21 @@ def var_from_numpy(x, cuda=False, requires_grad=False):
     return Variable(v, requires_grad=requires_grad)
 
 
+def project_(z, inds=None):
+    if inds is None:
+        z_norms = torch.norm(z, p=2, dim=1)
+        small_enough = z_norms <= 1
+        if not small_enough.all():
+            wts = z_norms[:, np.newaxis].expand_as(z)
+            wts.masked_fill_(small_enough[:, np.newaxis], 1)
+            z /= wts
+    else:
+        z_norms = torch.norm(z[inds], p=2, dim=1)
+        which = z_norms > 1
+        if which.any():
+            z[inds[which], :] /= z_norms[which][:, np.newaxis]
+
+
 def train(all_imgs, init_latents, out_path='.',
           epochs=50, batch_size=256, cuda=False, latent_dim=100,
           loss_fn='laplacian', optimizer='SGD',
@@ -94,6 +109,7 @@ def train(all_imgs, init_latents, out_path='.',
                 os.rmdir(d)
 
     z = make_var(init_latents.copy(), requires_grad=True)
+    project_(z.data)
     generator = make_generator(latent_dim=latent_dim)
     if cuda:
         generator = generator.cuda()
@@ -136,11 +152,7 @@ def train(all_imgs, init_latents, out_path='.',
             loss.backward()
             opt.step()
 
-            # projection step: happen on data directly, not Variables
-            z_norms = torch.norm(z.data[inds_v.data], p=2, dim=1)
-            which = z_norms > 1
-            if which.any():
-                z.data[inds_v.data[which]] /= z_norms[which][:, np.newaxis]
+            project_(z.data, inds=inds_v.data)
 
             loss_val = loss.data.cpu().numpy()[0]
             t.set_postfix(loss='{:.4f}'.format(loss_val))
